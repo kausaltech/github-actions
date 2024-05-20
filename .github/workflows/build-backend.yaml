@@ -147,7 +147,7 @@ jobs:
       - name: Update existing image tags
         if: steps.check_existing.outputs.status == 'found'
         run: |
-          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | { grep latest || true } | xargs)
+          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | grep latest | xargs)
           for tag in $TAGS ; do
             docker buildx imagetools create -t $tag ${{ env.IMAGE_FULL_PATH }}:${{ steps.build_meta.outputs.git_image_tag }} ;
           done

@@ -41,6 +41,7 @@ jobs:
         uses: clowdhaus/argo-cd-action@main
         with:
           version: '2.11.0'
+          command: version --client
 
       - name: Deploy image
         run: |

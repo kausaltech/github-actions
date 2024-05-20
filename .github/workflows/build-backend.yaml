@@ -71,9 +71,9 @@ jobs:
       contents: read
     container:
       image: harbor.kausal.dev/library/ubuntu:latest
-    defaults:
-      run:
-        shell: bash
+    #defaults:
+    #  run:
+    #    shell: bash
 
     concurrency:
       group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}

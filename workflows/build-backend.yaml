@@ -1,5 +1,4 @@
-# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: Build NextJS image
+name: Build Django images
 
 on:
   workflow_call:
@@ -32,8 +31,8 @@ on:
         default: ${{ vars.SENTRY_PROJECT }}
         type: string
     secrets:
-      NPM_TOKEN:
-        required: true
+      EXTRA_PYPI_INDEX:
+        required: false
       SENTRY_AUTH_TOKEN:
         required: false
     outputs:
@@ -81,7 +80,8 @@ jobs:
       image: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
       image_tag: ${{ steps.build_meta.outputs.git_image_tag }}
       build_id: ${{ steps.build_meta.outputs.build_id }}
-      deployment_env: ${{ outputs.deployment_env }}
+      deployment_env: ${{ steps.deployment.outputs.deployment_env }}
+      sentry_version: ${{ steps.build_meta.outputs.sentry_version }}
 
     steps:
       - name: Check out code
@@ -96,9 +96,11 @@ jobs:
       - name: Determine build env variables
         run: |
           github_run=$(printf "%04g" $GITHUB_RUN_NUMBER)
-          git_sha=$(echo ${{ github.sha }} | cut -c -8)
-          echo "build_id=$(date +%Y%m%d)_${github_run}_${git_sha}" >> $GITHUB_OUTPUT
+          git_sha=$(echo ${{ github.sha }} | cut -c -7)
+          build_id=$(date +%Y%m%d)_${github_run}_${git_sha}
+          echo "build_id=${build_id}" >> $GITHUB_OUTPUT
           echo "git_image_tag=git-${git_sha}" >> $GITHUB_OUTPUT
+          echo "sentry_version=${{ inputs.sentry_project }}@${build_id}" >> $GITHUB_OUTPUT
         id: build_meta
 
       - name: Determine Docker tags and labels
@@ -124,7 +126,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver: remote
-          driver-opts:
           endpoint: tcp://buildkitd:1234
           install: false
           cleanup: true
@@ -132,44 +133,46 @@ jobs:
       - name: Check if an image for this git head already exists
         id: check_existing
         run: |
-          if docker buildx imagetools inspect ${{ env.IMAGE_FULL_PATH }}:${{ steps.build_meta.outputs.git_image_tag }} ; then
-            echo status=found >> $GITHUB_OUTPUT ;
+          digest=$(docker buildx imagetools inspect ${{ env.IMAGE_FULL_PATH }}:${{ steps.build_meta.outputs.git_image_tag }} --format '{{ json .Manifest }}' | jq -r .digest)
+          if [ ! -z "$digest" ] ; then
+            echo status=found >> $GITHUB_OUTPUT
+            echo digest=$digest >> $GITHUB_OUTPUT
           else
-            echo status=not_found >> $GITHUB_OUTPUT ;
+            echo status=not_found >> $GITHUB_OUTPUT
           fi
 
       - name: Update existing image tags
         if: steps.check_existing.outputs.status == 'found'
         run: |
-          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | grep latest)
+          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | { grep latest || true } | xargs)
           for tag in $TAGS ; do
             docker buildx imagetools create -t $tag ${{ env.IMAGE_FULL_PATH }}:${{ steps.build_meta.outputs.git_image_tag }} ;
           done
 
-      - name: Build bundle
+      - name: Build app
         uses: docker/build-push-action@v5
         id: build_push
         if: steps.check_existing.outputs.status != 'found'
         with:
           context: .
+          file: ./docker/app/Dockerfile
           push: true
           build-args: |
-            SENTRY_ORG=${{ inputs.sentry_org }}
-            SENTRY_URL=${{ inputs.sentry_url }}
-            SENTRY_PROJECT=${{ inputs.sentry_project }}
             BUILD_ID=${{ steps.build_meta.outputs.build_id }}
+            SENTRY_RELEASE=${{ steps.build_meta.outputs.sentry_version }}
             GIT_REPO=${{ github.repository }}
             GIT_REV=${{ github.sha }}
             GIT_REPO_URL=${{ env.GIT_REPO_URL }}
-            NPM_REGISTRY_SERVER=${{ vars.NPM_REGISTRY_SERVER }}
           secrets: |
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
-            NPM_TOKEN=${{ secrets.NPM_TOKEN }}
+            EXTRA_PYPI_INDEX=${{ secrets.EXTRA_PYPI_INDEX }}
           labels: |
             ${{ steps.docker_meta.outputs.labels }}
             org.opencontainers.image.version=${{ steps.build_meta.outputs.build_id }}
           tags: |
             ${{ steps.docker_meta.outputs.tags }}
+          outputs: |
+            type=image,oci-mediatypes=true,compression=zstd,compression-level=12,force-compression=true,push=true,name=${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
           cache-from: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache
           cache-to: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache,mode=max,image-manifest=true
 
@@ -177,12 +180,12 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
-          subject-digest: ${{ steps.build_push.outputs.digest }}
+          subject-digest: ${{ steps.build_push.outputs.digest || steps.check_existing.outputs.digest }}
           push-to-registry: true
-  
+
       - name: Sign the images with GitHub OIDC Token
         env:
-          DIGEST: ${{ steps.build_push.outputs.digest }}
+          DIGEST: ${{ steps.build_push.outputs.digest || steps.check_existing.outputs.digest }}
           TAGS: ${{ steps.docker_meta.outputs.tags }}
         run: |
           images=""
@@ -193,3 +196,15 @@ jobs:
           done
           cosign sign --yes ${images}
         shell: bash
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v1
+        if: steps.deployment.outputs.deployment_env
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ inputs.sentry_org }}
+          SENTRY_PROJECT: ${{ inputs.sentry_project }}
+          SENTRY_URL: ${{ inputs.sentry_url }}
+        with:
+          environment: ${{ steps.deployment.outputs.deployment_env }}
+          version: ${{ steps.build_meta.outputs.sentry_version }}

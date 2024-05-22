@@ -148,20 +148,22 @@ jobs:
       - name: Check if an image for this git head already exists
         id: check_existing
         run: |
-          if docker buildx imagetools inspect ${{ env.IMAGE_FULL_PATH }}:${{ steps.build_meta.outputs.git_image_tag }} ; then
-            echo status=found >> $GITHUB_OUTPUT ;
+          digest=$(docker buildx imagetools inspect ${{ env.IMAGE_FULL_PATH }}:${{ steps.build_meta.outputs.git_image_tag }} --format '{{ json .Manifest }}' | jq -r .digest)
+          if [ ! -z "$digest" ] ; then
+            echo status=found >> $GITHUB_OUTPUT
+            echo digest=$digest >> $GITHUB_OUTPUT
           else
-            echo status=not_found >> $GITHUB_OUTPUT ;
+            echo status=not_found >> $GITHUB_OUTPUT
           fi
 
       - name: Update existing image tags
         if: steps.check_existing.outputs.status == 'found'
         run: |
-          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | grep latest)
+          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | grep latest | xargs)
           for tag in $TAGS ; do
             docker buildx imagetools create -t $tag ${{ env.IMAGE_FULL_PATH }}:${{ steps.build_meta.outputs.git_image_tag }} ;
           done
-
+  
       - name: Build bundle
         uses: docker/build-push-action@v5
         id: build_push
@@ -213,6 +215,18 @@ jobs:
           done
           cosign sign --yes ${images}
         shell: bash
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v1
+        if: steps.deployment.outputs.deployment_env
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ inputs.sentry_org }}
+          SENTRY_PROJECT: ${{ inputs.sentry_project }}
+          SENTRY_URL: ${{ inputs.sentry_url }}
+        with:
+          environment: ${{ steps.deployment.outputs.deployment_env }}
+          version: ${{ steps.build_meta.outputs.sentry_version }}
 
   cdn-upload:
     needs: [build]

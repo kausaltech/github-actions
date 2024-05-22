@@ -3,6 +3,9 @@ name: Build Django images
 on:
   workflow_call:
     inputs:
+      project_id:
+        required: true
+        type: string
       docker_image_name:
         required: false
         type: string

@@ -50,7 +50,7 @@ jobs:
             exit 1
           fi
 
-          labels="kausal.tech/deployment=${{ inputs.deployment_env }},kausal.tech/project=${{ inputs.project_name }}"
+          labels="kausal.tech/deployment=${{ inputs.deployment_env }},kausal.tech/project=${{ inputs.project_id }}"
           apps=$(argocd app list -l $labels -o name)
           echo "Matching apps: $apps"
           for app in $apps ; do

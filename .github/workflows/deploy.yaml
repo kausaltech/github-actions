@@ -4,7 +4,7 @@ name: Deploy image
 on:
   workflow_call:
     inputs:
-      project_name:
+      project_id:
         required: true
         type: string
       docker_image_repo:

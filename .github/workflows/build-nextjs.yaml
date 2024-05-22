@@ -199,12 +199,12 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
-          subject-digest: ${{ steps.build_push.outputs.digest }}
+          subject-digest: ${{ steps.build_push.outputs.digest || steps.check_existing.outputs.digest }}
           push-to-registry: true
   
       - name: Sign the images with GitHub OIDC Token
         env:
-          DIGEST: ${{ steps.build_push.outputs.digest }}
+          DIGEST: ${{ steps.build_push.outputs.digest || steps.check_existing.outputs.digest }}
           TAGS: ${{ steps.docker_meta.outputs.tags }}
         run: |
           images=""

@@ -112,8 +112,8 @@ jobs:
           echo "sentry_version=${{ inputs.sentry_project }}@${build_id}" >> $GITHUB_OUTPUT
 
           if [ ! -z "${{ secrets.CF_ACCESS_KEY_ID }}" -a ! -z "${{ vars.CF_S3_PUBLIC_URL }}" ] ; then
-            echo "nextjs_asset_prefix=${{ vars.CF_S3_PUBLIC_URL }}/${build_id}"
-            echo "nextjs_cdn_bucket_path=${build_id}"
+            echo "nextjs_asset_prefix=${{ vars.CF_S3_PUBLIC_URL }}/${build_id}" >> $GITHUB_OUTPUT
+            echo "nextjs_cdn_bucket_path=${build_id}" >> $GITHUB_OUTPUT
           fi
         id: build_meta
 

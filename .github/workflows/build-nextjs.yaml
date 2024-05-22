@@ -4,6 +4,9 @@ name: Build NextJS image
 on:
   workflow_call:
     inputs:
+      project_id:
+        required: true
+        type: string
       docker_image_name:
         required: false
         type: string
@@ -35,6 +38,10 @@ on:
       NPM_TOKEN:
         required: true
       SENTRY_AUTH_TOKEN:
+        required: false
+      CF_ACCESS_KEY_ID:
+        required: false
+      CF_SECRET_ACCESS_KEY:
         required: false
     outputs:
       image_id:
@@ -81,7 +88,9 @@ jobs:
       image: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
       image_tag: ${{ steps.build_meta.outputs.git_image_tag }}
       build_id: ${{ steps.build_meta.outputs.build_id }}
-      deployment_env: ${{ outputs.deployment_env }}
+      deployment_env: ${{ steps.deployment.outputs.deployment_env }}
+      nextjs_asset_prefix: ${{ steps.build_meta.outputs.nextjs_asset_prefix }}
+      nextjs_cdn_bucket_path: ${{ steps.build_meta.outputs.nextjs_cdn_bucket_path }}
 
     steps:
       - name: Check out code
@@ -96,9 +105,16 @@ jobs:
       - name: Determine build env variables
         run: |
           github_run=$(printf "%04g" $GITHUB_RUN_NUMBER)
-          git_sha=$(echo ${{ github.sha }} | cut -c -8)
-          echo "build_id=$(date +%Y%m%d)_${github_run}_${git_sha}" >> $GITHUB_OUTPUT
+          git_sha=$(echo ${{ github.sha }} | cut -c -7)
+          build_id=$(date +%Y%m%d)_${github_run}_${git_sha}
+          echo "build_id=${build_id}" >> $GITHUB_OUTPUT
           echo "git_image_tag=git-${git_sha}" >> $GITHUB_OUTPUT
+          echo "sentry_version=${{ inputs.sentry_project }}@${build_id}" >> $GITHUB_OUTPUT
+
+          if [ ! -z "${{ secrets.CF_ACCESS_KEY_ID }}" -a ! -z "${{ vars.CF_S3_PUBLIC_URL }}" ] ; then
+            echo "nextjs_asset_prefix=${{ vars.CF_S3_PUBLIC_URL }}/${build_id}"
+            echo "nextjs_cdn_bucket_path=${build_id}"
+          fi
         id: build_meta
 
       - name: Determine Docker tags and labels
@@ -150,6 +166,8 @@ jobs:
         uses: docker/build-push-action@v5
         id: build_push
         if: steps.check_existing.outputs.status != 'found'
+        env:
+          BUILDX_GIT_INFO: 'false'
         with:
           context: .
           push: true
@@ -157,11 +175,13 @@ jobs:
             SENTRY_ORG=${{ inputs.sentry_org }}
             SENTRY_URL=${{ inputs.sentry_url }}
             SENTRY_PROJECT=${{ inputs.sentry_project }}
+            SENTRY_RELEASE=${{ steps.build_meta.outputs.sentry_version }}
             BUILD_ID=${{ steps.build_meta.outputs.build_id }}
             GIT_REPO=${{ github.repository }}
             GIT_REV=${{ github.sha }}
             GIT_REPO_URL=${{ env.GIT_REPO_URL }}
             NPM_REGISTRY_SERVER=${{ vars.NPM_REGISTRY_SERVER }}
+            NEXTJS_ASSET_PREFIX=${{ steps.build_meta.outputs.nextjs_asset_prefix }}
           secrets: |
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             NPM_TOKEN=${{ secrets.NPM_TOKEN }}
@@ -193,3 +213,36 @@ jobs:
           done
           cosign sign --yes ${images}
         shell: bash
+
+  cdn-upload:
+    needs: [build]
+    if: needs.build.outputs.nextjs_cdn_bucket_path
+    name: Upload static assets to CDN
+    runs-on: self-hosted
+    container:
+      image: ${{ needs.build.outputs.image }}
+    env:
+      RCLONE_S3_ACCESS_KEY_ID: ${{ secrets.CF_ACCESS_KEY_ID }}
+      RCLONE_S3_SECRET_ACCESS_KEY: ${{ secrets.CF_SECRET_ACCESS_KEY }}
+      RCLONE_S3_ENDPOINT: ${{ vars.CF_S3_ENDPOINT }}
+      RCLONE_S3_ENV_AUTH: 'true'
+      RCLONE_S3_PROVIDER: Cloudflare
+      RCLONE_S3_DISABLE_CHECKSUM: 'true'
+      RCLONE_S3_UPLOAD_CONCURRENCY: '32'
+      RCLONE_S3_NO_CHECK_BUCKET: 'true'
+      RCLONE_S3_NO_HEAD: 'true'
+    concurrency:
+      group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
+
+    steps:
+      - name: Install rclone
+        run: |
+          apk update
+          apk add rclone
+      - name: Upload files
+        run: |
+          DEST=":s3:/${{ vars.CF_CDN_BUCKET }}/${{ needs.build.outputs.nextjs_cdn_bucket_path }}"
+          FLAGS="--transfers 32 --checkers 32 --copy-links --no-check-dest"
+          rclone copy $FLAGS .next/static "${DEST}/_next/static"
+          rclone copy $FLAGS public/static ${DEST}/static
+        working-directory: /app

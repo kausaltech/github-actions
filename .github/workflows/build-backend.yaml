@@ -156,6 +156,8 @@ jobs:
         uses: docker/build-push-action@v5
         id: build_push
         if: steps.check_existing.outputs.status != 'found'
+        env:
+          BUILDX_GIT_INFO: 'false'
         with:
           context: .
           file: ./docker/app/Dockerfile

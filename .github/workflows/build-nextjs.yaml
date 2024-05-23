@@ -19,9 +19,6 @@ on:
         required: false
         type: string
         default: ${{ vars.DOCKER_REGISTRY }}
-      image_tag:
-        required: false
-        type: string
       sentry_org:
         required: false
         default: ${{ vars.SENTRY_ORG }}
@@ -90,8 +87,8 @@ jobs:
       image_digest: ${{ steps.check_existing.outputs.digest || steps.build_push.outputs.digest }}
       build_id: ${{ steps.check_existing.outputs.build_id || steps.build_meta.outputs.build_id }}
       deployment_env: ${{ steps.context.outputs.deployment_env }}
-      nextjs_asset_prefix: ${{ steps.build_meta.outputs.nextjs_asset_prefix }}
-      nextjs_cdn_bucket_path: ${{ steps.build_meta.outputs.nextjs_cdn_bucket_path }}
+      #nextjs_asset_prefix: ${{ steps.build_meta.outputs.nextjs_asset_prefix }}
+      #nextjs_cdn_bucket_path: ${{ steps.build_meta.outputs.nextjs_cdn_bucket_path }}
 
     steps:
       - name: Check out code
@@ -108,7 +105,7 @@ jobs:
           git_tag=git-${git_short_sha}
           echo "git_image_tag=${git_tag}" >> $GITHUB_OUTPUT
           echo "GIT_IMAGE_TAG=${git_tag}" >> $GITHUB_ENV
-          echo "git_short_sha=$git_sha" >> $GITHUB_OUTPUT
+          echo "git_short_sha=$git_short_sha" >> $GITHUB_OUTPUT
         id: context
 
       - name: Log into Docker registry
@@ -131,7 +128,7 @@ jobs:
           fi
           set -e
           digest=$(cat $image_info | jq -j .manifest.digest)
-          build_id=$(cat $image_info | jq -j '.image.config.Labels."org.opencontainers.image.version"')
+          build_id="$(cat $image_info | jq -j '.image.config.Labels."org.opencontainers.image.version"')"
           echo "Digest: $digest"
           echo "Build ID: $build_id"
           if [ -z "$digest" -o -z "$build_id" ] ; then
@@ -141,8 +138,8 @@ jobs:
 
           echo status=found >> $GITHUB_OUTPUT
           echo digest=$digest >> $GITHUB_OUTPUT
-          echo build_id="$build_id" >> $GITHUB_OUTPUT
-          echo IMAGE_BUILD_ID=$build_id >> $GITHUB_ENV
+          echo "build_id=$build_id" >> $GITHUB_OUTPUT
+          echo "IMAGE_BUILD_ID=$build_id" >> $GITHUB_ENV
           echo "sentry_version=${{ inputs.sentry_project }}@${build_id}" >> $GITHUB_OUTPUT
 
       - name: Determine build env variables
@@ -155,10 +152,10 @@ jobs:
           echo IMAGE_BUILD_ID=$build_id >> $GITHUB_ENV
           echo "sentry_version=${{ inputs.sentry_project }}@${build_id}" >> $GITHUB_OUTPUT
 
-          if [ ! -z "${{ secrets.CF_ACCESS_KEY_ID }}" -a ! -z "${{ vars.CF_S3_PUBLIC_URL }}" ] ; then
-            echo "nextjs_asset_prefix=${{ vars.CF_S3_PUBLIC_URL }}/${build_id}" >> $GITHUB_OUTPUT
-            echo "nextjs_cdn_bucket_path=${build_id}" >> $GITHUB_OUTPUT
-          fi
+          #if [ ! -z "${{ secrets.CF_ACCESS_KEY_ID }}" -a ! -z "${{ vars.CF_S3_PUBLIC_URL }}" ] ; then
+          #  echo "nextjs_asset_prefix=${{ vars.CF_S3_PUBLIC_URL }}/${build_id}" >> $GITHUB_OUTPUT
+          #  echo "nextjs_cdn_bucket_path=${build_id}" >> $GITHUB_OUTPUT
+          #fi
         id: build_meta
 
       - name: Determine Docker tags and labels
@@ -210,7 +207,7 @@ jobs:
             GIT_REV=${{ github.sha }}
             GIT_REPO_URL=${{ env.GIT_REPO_URL }}
             NPM_REGISTRY_SERVER=${{ vars.NPM_REGISTRY_SERVER }}
-            NEXTJS_ASSET_PREFIX=${{ steps.build_meta.outputs.nextjs_asset_prefix }}
+          # NEXTJS_ASSET_PREFIX=${{ steps.build_meta.outputs.nextjs_asset_prefix }}
           secrets: |
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             NPM_TOKEN=${{ secrets.NPM_TOKEN }}
@@ -220,7 +217,7 @@ jobs:
           tags: |
             ${{ steps.docker_meta.outputs.tags }}
           cache-from: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache
-          cache-to: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache,mode=max,image-manifest=true
+          cache-to: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache,mode=max,image-manifest=true,oci-mediatypes=true
 
       - name: Attest image
         uses: actions/attest-build-provenance@v1

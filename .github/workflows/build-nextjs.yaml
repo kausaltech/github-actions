@@ -216,8 +216,8 @@ jobs:
             org.opencontainers.image.version=${{ steps.build_meta.outputs.build_id }}
           tags: |
             ${{ steps.docker_meta.outputs.tags }}
-          cache-from: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache
-          cache-to: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache,mode=max,image-manifest=true,oci-mediatypes=true
+          #cache-from: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache
+          #cache-to: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache,mode=max,image-manifest=true,oci-mediatypes=true
 
       - name: Attest image
         uses: actions/attest-build-provenance@v1

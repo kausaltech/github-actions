@@ -148,7 +148,7 @@ jobs:
           github_run=$(printf "%04g" $GITHUB_RUN_NUMBER)
           git_sha=${{ steps.context.outputs.git_short_sha }}
           build_id=$(date +%Y%m%d)_${github_run}_${git_sha}
-          echo "build_id=${build_id}" >> $GITHUB_ENV
+          echo "build_id=${build_id}" >> $GITHUB_OUTPUT
           echo IMAGE_BUILD_ID=$build_id >> $GITHUB_ENV
           echo "sentry_version=${{ inputs.sentry_project }}@${build_id}" >> $GITHUB_OUTPUT
 

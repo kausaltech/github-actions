@@ -247,35 +247,35 @@ jobs:
           environment: ${{ steps.context.outputs.deployment_env }}
           version: ${{ steps.build_meta.outputs.sentry_version || steps.check_existing.outputs.sentry_version}}
 
-  cdn-upload:
-    needs: [build]
-    if: needs.build.outputs.nextjs_cdn_bucket_path
-    name: Upload static assets to CDN
-    runs-on: self-hosted
-    container:
-      image: "${{ needs.build.outputs.image }}:${{ needs.build.outputs.image_tag }}"
-    env:
-      RCLONE_S3_ACCESS_KEY_ID: ${{ secrets.CF_ACCESS_KEY_ID }}
-      RCLONE_S3_SECRET_ACCESS_KEY: ${{ secrets.CF_SECRET_ACCESS_KEY }}
-      RCLONE_S3_ENDPOINT: ${{ vars.CF_S3_ENDPOINT }}
-      RCLONE_S3_ENV_AUTH: 'true'
-      RCLONE_S3_PROVIDER: Cloudflare
-      RCLONE_S3_DISABLE_CHECKSUM: 'true'
-      RCLONE_S3_UPLOAD_CONCURRENCY: '32'
-      RCLONE_S3_NO_CHECK_BUCKET: 'true'
-      RCLONE_S3_NO_HEAD: 'true'
-    concurrency:
-      group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
+  # cdn-upload:
+  #   needs: [build]
+  #   if: needs.build.outputs.nextjs_cdn_bucket_path
+  #   name: Upload static assets to CDN
+  #   runs-on: self-hosted
+  #   container:
+  #     image: "${{ needs.build.outputs.image }}:${{ needs.build.outputs.image_tag }}"
+  #   env:
+  #     RCLONE_S3_ACCESS_KEY_ID: ${{ secrets.CF_ACCESS_KEY_ID }}
+  #     RCLONE_S3_SECRET_ACCESS_KEY: ${{ secrets.CF_SECRET_ACCESS_KEY }}
+  #     RCLONE_S3_ENDPOINT: ${{ vars.CF_S3_ENDPOINT }}
+  #     RCLONE_S3_ENV_AUTH: 'true'
+  #     RCLONE_S3_PROVIDER: Cloudflare
+  #     RCLONE_S3_DISABLE_CHECKSUM: 'true'
+  #     RCLONE_S3_UPLOAD_CONCURRENCY: '32'
+  #     RCLONE_S3_NO_CHECK_BUCKET: 'true'
+  #     RCLONE_S3_NO_HEAD: 'true'
+  #   concurrency:
+  #     group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
 
-    steps:
-      - name: Install rclone
-        run: |
-          apk update
-          apk add rclone
-      - name: Upload files
-        run: |
-          DEST=":s3:/${{ vars.CF_CDN_BUCKET }}/${{ needs.build.outputs.nextjs_cdn_bucket_path }}"
-          FLAGS="--transfers 32 --checkers 32 --copy-links --no-check-dest"
-          rclone copy $FLAGS .next/static "${DEST}/_next/static"
-          rclone copy $FLAGS public/static ${DEST}/static
-        working-directory: /app
+  #   steps:
+  #     - name: Install rclone
+  #       run: |
+  #         apk update
+  #         apk add rclone
+  #     - name: Upload files
+  #       run: |
+  #         DEST=":s3:/${{ vars.CF_CDN_BUCKET }}/${{ needs.build.outputs.nextjs_cdn_bucket_path }}"
+  #         FLAGS="--transfers 32 --checkers 32 --copy-links --no-check-dest"
+  #         rclone copy $FLAGS .next/static "${DEST}/_next/static"
+  #         rclone copy $FLAGS public/static ${DEST}/static
+  #       working-directory: /app

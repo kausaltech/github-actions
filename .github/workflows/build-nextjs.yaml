@@ -96,7 +96,7 @@ jobs:
 
       - name: Set build context
         run: |
-          if [ "${{ startsWith(github.ref, 'refs/heads/deployment/') }}" -eq "true" ] ; then
+          if [ "${{ startsWith(github.ref, 'refs/heads/deployment/') }}" == "true" ] ; then
             echo "deployment_env=$(echo ${{ github.ref }} | cut -d / -f 4)" >> $GITHUB_OUTPUT
           else
             echo "deployment_env=" >> $GITHUB_OUTPUT

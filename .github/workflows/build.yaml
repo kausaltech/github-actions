@@ -87,10 +87,10 @@ jobs:
       group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
 
     outputs:
-      image_id: ${{ steps.build_push.outputs.imageid }}
+      image_id: ${{ steps.build_output.outputs.imageid }}
       image: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
       image_tag: ${{ steps.context.outputs.git_image_tag }}
-      image_digest: ${{ steps.check_existing.outputs.digest || steps.build_push.outputs.digest }}
+      image_digest: ${{ steps.check_existing.outputs.digest || steps.build_output.outputs.digest }}
       build_id: ${{ steps.check_existing.outputs.build_id || steps.build_meta.outputs.build_id }}
       deployment_env: ${{ steps.context.outputs.deployment_env }}
 

@@ -36,8 +36,12 @@ on:
         default: ${{ vars.SENTRY_PROJECT }}
         type: string
     secrets:
-      NPM_TOKEN:
+      DOCKER_USERNAME:
         required: true
+      DOCKER_PASSWORD:
+        required: true
+      NPM_TOKEN:
+        required: false
       SENTRY_AUTH_TOKEN:
         required: false
       EXTRA_PYPI_INDEX:
@@ -212,12 +216,14 @@ jobs:
             GIT_REPO_URL=${{ env.GIT_REPO_URL }}
           secrets: |
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
-            NPM_TOKEN=${{ secrets.NPM_TOKEN }}
+            EXTRA_PYPI_INDEX=${{ secrets.EXTRA_PYPI_INDEX }}
           labels: |
             ${{ steps.docker_meta.outputs.labels }}
             org.opencontainers.image.version=${{ steps.build_meta.outputs.build_id }}
           tags: |
             ${{ steps.docker_meta.outputs.tags }}
+          outputs: |
+            type=image,oci-mediatypes=true,compression=zstd,compression-level=12,force-compression=true,push=true,name=${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
           #cache-from: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache
           #cache-to: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache,mode=max,image-manifest=true,oci-mediatypes=true
 

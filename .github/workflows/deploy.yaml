@@ -14,6 +14,9 @@ on:
       docker_image_tag:
         required: true
         type: string
+      build_id:
+        required: false
+        type: string
       deployment_env:
         required: true
         type: string
@@ -55,5 +58,5 @@ jobs:
           echo "Matching apps: $apps"
           for app in $apps ; do
             echo "Updating ${app}..."
-            argocd app set $app -p image.tag=${{ inputs.docker_image_tag }}
+            argocd app set $app -p image.tag=${{ inputs.docker_image_tag }} -p appVersion=${{ inputs.build_id }}
           done

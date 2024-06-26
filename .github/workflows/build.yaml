@@ -81,7 +81,7 @@ jobs:
       attestations: write
       contents: read
     container:
-      image: harbor.kausal.dev/library/ubuntu:latest
+      image: harbor.kausal.tech/library/ubuntu:latest
 
     concurrency:
       group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}

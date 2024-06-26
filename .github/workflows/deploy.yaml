@@ -31,7 +31,7 @@ jobs:
     name: Deploy in Kubernetes
     runs-on: runner-prod
     container:
-      image: harbor.kausal.dev/library/ubuntu:latest
+      image: harbor.kausal.tech/library/ubuntu:latest
     env:
       ARGOCD_SERVER: ${{ secrets.argocd_server || secrets.ARGOCD_SERVER }}
       ARGOCD_AUTH_TOKEN: ${{ secrets.argocd_auth_token || secrets.ARGOCD_AUTH_TOKEN }}

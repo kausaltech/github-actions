@@ -74,7 +74,7 @@ env:
 jobs:
   build:
     name: Build
-    runs-on: self-hosted
+    runs-on: runner-prod
     permissions:
       id-token: write
       packages: write

@@ -29,7 +29,7 @@ on:
 jobs:
   deploy:
     name: Deploy in Kubernetes
-    runs-on: self-hosted
+    runs-on: runner-prod
     container:
       image: harbor.kausal.dev/library/ubuntu:latest
     env:

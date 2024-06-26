@@ -181,7 +181,7 @@ jobs:
           for tag in $TAGS ; do
             echo "Updating tag $tag"
             docker buildx imagetools create -t $tag ${{ env.IMAGE_FULL_PATH }}@${{ steps.check_existing.outputs.digest }} ;
-            full_tag="${{ env.IMAGE_FULL_PATH }}:${tag}@${{ steps.check_existing.outputs.digest }}"
+            full_tag="${tag}@${{ steps.check_existing.outputs.digest }}"
             updated_tags="$updated_tags $full_tag"
           done
           echo updated_tags="$updated_tags" >> $GITHUB_OUTPUT

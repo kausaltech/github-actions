@@ -278,7 +278,7 @@ jobs:
       - name: Sign the images with GitHub OIDC Token
         if: steps.build_meta.outcome != 'skipped' || steps.update_existing_tags.outputs.updated_tags
         env:
-          DIGEST: ${{ steps.build_output.outputs.digest }}
+          DIGEST: ${{ steps.build_output.outputs.digest || steps.check_existing.outputs.digest }}
           # IMAGE: ${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}
         run: |
           images="${{ steps.update_existing_tags.outputs.updated_tags }} "

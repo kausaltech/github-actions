@@ -58,5 +58,8 @@ jobs:
           echo "Matching apps: $apps"
           for app in $apps ; do
             echo "Updating ${app}..."
-            argocd app set $app -p image.tag=${{ inputs.docker_image_tag }} -p appVersion=${{ inputs.build_id }}
+            argocd app set $app \
+              -p image.tag=${{ inputs.docker_image_tag }} \
+              -p image.pullPolicy=IfNotPresent \
+              -p appVersion=${{ inputs.build_id }}
           done

@@ -58,7 +58,13 @@ jobs:
           echo "Matching apps: $apps"
           for app in $apps ; do
             echo "Updating ${app}..."
-            argocd app set $app \
+            nr_sources=$(argocd app get $app -o json | jq '.spec.sources | length')
+            if [ "${nr_sources}" -gt 1 ] ; then
+              source_pos="--source-position 1"
+            else
+              source_pos=""
+            fi
+            argocd app set $app $source_pos \
               -p image.tag=${{ inputs.docker_image_tag }} \
               -p image.pullPolicy=IfNotPresent \
               -p appVersion=${{ inputs.build_id }}

@@ -59,7 +59,9 @@ jobs:
           for app in $apps ; do
             echo "Updating ${app}..."
             nr_sources=$(argocd app get $app -o json | jq '.spec.sources | length')
-            if [ "${nr_sources}" -gt 1 ] ; then
+            # Check for multi-source applications, and if we have one,
+            # assume that the first source is always the helm chart.
+            if [ "${nr_sources}" -gte 0 ] ; then
               source_pos="--source-position 1"
             else
               source_pos=""

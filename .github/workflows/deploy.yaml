@@ -21,53 +21,39 @@ on:
         required: true
         type: string
     secrets:
-      argocd_server:
-        required: false
-      argocd_auth_token:
-        required: false
+      gitops_pat:
+        required: true
 
 jobs:
   deploy:
-    name: Deploy in Kubernetes
-    runs-on: runner-prod
-    container:
-      image: harbor.kausal.tech/library/ubuntu:latest
-    env:
-      ARGOCD_SERVER: ${{ secrets.argocd_server || secrets.ARGOCD_SERVER }}
-      ARGOCD_AUTH_TOKEN: ${{ secrets.argocd_auth_token || secrets.ARGOCD_AUTH_TOKEN }}
+    name: Deploy image
+    runs-on: ubuntu-latest
 
     concurrency:
-      group: ${{ inputs.docker_image_repo }}
+      group: ${{ inputs.project_id}}/${{ inputs.deployment_env }}
 
     steps:
-      - name: Download ArgoCD CLI
-        uses: clowdhaus/argo-cd-action@main
+      - name: Checkout gitops repo
+        uses: actions/checkout@v4
         with:
-          version: '2.11.0'
-          command: version --client
-
-      - name: Deploy image
+          repository: kausaltech/kausal-gitops
+          ref: main
+          token: ${{ secrets.gitops_pat }}
+          fetch-depth: 0
+      - name: Update image information
         run: |
-          if [ -z "$ARGOCD_SERVER" -o -z "$ARGOCD_AUTH_TOKEN" ] ; then
-            echo "Environment variables not set"
-            exit 1
-          fi
-
-          labels="kausal.tech/deployment=${{ inputs.deployment_env }},kausal.tech/project=${{ inputs.project_id }}"
-          apps=$(argocd app list -l $labels -o name)
-          echo "Matching apps: $apps"
-          for app in $apps ; do
-            echo "Updating ${app}..."
-            nr_sources=$(argocd app get $app -o json | jq '.spec.sources | length')
-            # Check for multi-source applications, and if we have one,
-            # assume that the first source is always the helm chart.
-            if [ "${nr_sources}" -gte 0 ] ; then
-              source_pos="--source-position 1"
-            else
-              source_pos=""
-            fi
-            argocd app set $app $source_pos \
-              -p image.tag=${{ inputs.docker_image_tag }} \
-              -p image.pullPolicy=IfNotPresent \
-              -p appVersion=${{ inputs.build_id }}
-          done
+          path="${{ inputs.project_id }}/${{ inputs.deployment_env }}"
+          mkdir -p $path
+          fn="${path}/version.yaml"
+          cat <<EOF > ${fn}
+          appVersion: '${{ inputs.build_id }}'
+          image:
+            repository: ${{ inputs.docker_image_repo }}
+            tag: '${{ inputs.docker_image_tag }}'
+            pullPolicy: IfNotPresent
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ${fn}
+          git commit -m "Deployment of image ${{ inputs.docker_image_tag }} to ${{ inputs.project_id }}/${{ inputs.deployment_env }} by ${{ github.actor }}"
+          git push

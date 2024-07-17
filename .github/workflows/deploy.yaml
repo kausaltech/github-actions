@@ -43,6 +43,7 @@ jobs:
       - name: Update image information
         run: |
           path="${{ inputs.project_id }}/${{ inputs.deployment_env }}"
+          mkdir -p $path
           fn="${path}/version.yaml"
           cat <<EOF > ${fn}
           appVersion: '${{ inputs.build_id }}'

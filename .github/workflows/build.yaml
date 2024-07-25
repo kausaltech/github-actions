@@ -292,6 +292,7 @@ jobs:
       - name: Create Sentry release
         uses: getsentry/action-release@v1
         if: steps.context.outputs.deployment_env
+        continue-on-error: true
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ inputs.sentry_org }}

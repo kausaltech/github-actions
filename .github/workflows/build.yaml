@@ -270,6 +270,7 @@ jobs:
       - name: Attest image
         uses: actions/attest-build-provenance@v1
         if: steps.build_meta.outcome != 'skipped'
+        continue-on-error: true
         with:
           subject-name: ${{ env.IMAGE_FULL_PATH }}
           subject-digest: ${{ steps.build_output.outputs.digest }}

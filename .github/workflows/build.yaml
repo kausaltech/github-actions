@@ -35,6 +35,12 @@ on:
         required: false
         default: ${{ vars.SENTRY_PROJECT }}
         type: string
+      django_project:
+        required: false
+        type: string
+      dockerfile:
+        required: false
+        type: string
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -205,7 +211,7 @@ jobs:
           BUILDX_GIT_INFO: 'false'
         with:
           context: .
-          file: ./docker/app/Dockerfile
+          file: ${{ inputs.dockerfile || './docker/app/Dockerfile' }}
           push: true
           build-args: |
             SENTRY_ORG=${{ inputs.sentry_org }}
@@ -216,6 +222,7 @@ jobs:
             GIT_REPO=${{ github.repository }}
             GIT_REV=${{ github.sha }}
             GIT_REPO_URL=${{ env.GIT_REPO_URL }}
+            DJANGO_PROJECT=${{ inputs.django_project || '' }}
           secrets: |
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             EXTRA_PYPI_INDEX=${{ secrets.EXTRA_PYPI_INDEX }}

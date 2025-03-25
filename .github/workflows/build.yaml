@@ -242,6 +242,7 @@ jobs:
         if: inputs.project_type == 'nextjs' && steps.build_meta.outcome != 'skipped'
         env:
           BUILDX_GIT_INFO: 'false'
+          HUSKY: '0'
         with:
           context: .
           push: true

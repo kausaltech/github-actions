@@ -115,6 +115,21 @@ jobs:
           fi
           git_short_sha=$(echo ${{ github.sha }} | cut -c -7)
           git_tag=git-${git_short_sha}
+
+          DOCKERFILE_DIRS=". ./kausal_common/docker ./docker ./docker/app"
+          for dir in $DOCKERFILE_DIRS; do
+            if [ -f "${dir}/Dockerfile" ]; then
+              echo "DOCKERFILE=${dir}/Dockerfile" >> $GITHUB_ENV
+              echo "dockerfile=${dir}/Dockerfile" >> $GITHUB_OUTPUT
+              dockerfile_found=1
+              break
+            fi
+          done
+          if [ -z "$dockerfile_found" ]; then
+            echo "Error: Dockerfile not found in any of the specified locations: $DOCKERFILE_DIRS"
+            exit 1
+          fi
+
           echo "git_image_tag=${git_tag}" >> $GITHUB_OUTPUT
           echo "GIT_IMAGE_TAG=${git_tag}" >> $GITHUB_ENV
           echo "git_short_sha=$git_short_sha" >> $GITHUB_OUTPUT
@@ -237,7 +252,7 @@ jobs:
           #cache-to: type=registry,ref=${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}:cache,mode=max,image-manifest=true,oci-mediatypes=true
 
       - name: Build NextJS bundle
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         id: build_nextjs
         if: inputs.project_type == 'nextjs' && steps.build_meta.outcome != 'skipped'
         env:
@@ -245,6 +260,7 @@ jobs:
           HUSKY: '0'
         with:
           context: .
+          file: ${{ inputs.dockerfile || steps.context.outputs.dockerfile || './Dockerfile'}}
           push: true
           build-args: |
             SENTRY_ORG=${{ inputs.sentry_org }}

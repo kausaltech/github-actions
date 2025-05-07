@@ -22,7 +22,9 @@ on:
         type: string
     secrets:
       gitops_pat:
-        required: true
+        required: false
+      gitops_ssh_key:
+        required: false
 
 jobs:
   deploy:
@@ -39,6 +41,7 @@ jobs:
           repository: kausaltech/kausal-gitops
           ref: main
           token: ${{ secrets.gitops_pat }}
+          ssh-key: ${{ secrets.gitops_ssh_key }}
           fetch-depth: 0
       - name: Update image information
         run: |

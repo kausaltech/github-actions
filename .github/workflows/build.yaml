@@ -217,7 +217,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver: remote
-          driver-opts:
+          driver-opts: ''
           endpoint: tcp://buildkitd:1234
           install: false
           cleanup: true
@@ -299,7 +299,7 @@ jobs:
 
       - name: Attest image
         uses: actions/attest-build-provenance@v1
-        if: steps.build_meta.outcome != 'skipped'
+        if: steps.build_meta.outcome != 'skipped' && ! contains(github.repository, 'private')
         continue-on-error: true
         with:
           subject-name: ${{ env.IMAGE_FULL_PATH }}

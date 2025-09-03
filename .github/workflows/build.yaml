@@ -195,6 +195,7 @@ jobs:
             type=raw,value=build-${{steps.build_meta.outputs.build_id}},enable=${{steps.check_existing.outputs.status != 'found'}}
             type=ref,event=pr
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest-deployment-{{branch}},enable=${{steps.context.outputs.deployment_env != ''}}
             type=raw,value={{branch}}-latest,enable=${{steps.context.outputs.deployment_env != ''}}
 
       - name: Update existing image tags

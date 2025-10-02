@@ -15,6 +15,12 @@ on:
         required: false
         type: string
         default: ${{ vars.DOCKER_IMAGE_REPO }}
+
+      helm_chart_repo:
+        required: false
+        type: string
+        default: ${{ vars.HELM_CHART_REPO }}
+
       docker_build_cache_image_name:
         required: false
         type: string
@@ -41,6 +47,11 @@ on:
       dockerfile:
         required: false
         type: string
+      ubuntu_image:
+        required: false
+        type: string
+        default: harbor.kausal.tech/library/ubuntu:v20251002
+
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -75,6 +86,12 @@ on:
       deployment_env:
         description: "Environment in which the image should be deployed"
         value: "${{ jobs.build.outputs.deployment_env }}"
+      helm_chart_url:
+        description: "Helm chart URL for the build"
+        value: "${{ jobs.helm-chart.outputs.chart_url }}"
+      helm_chart_version:
+        description: "Helm chart version for the build"
+        value: "${{ jobs.helm-chart.outputs.chart_version }}"
 
 env:
   IMAGE_NAME: ${{ inputs.docker_image_name }}
@@ -91,7 +108,7 @@ jobs:
       attestations: write
       contents: read
     container:
-      image: harbor.kausal.tech/library/ubuntu:latest
+      image: ${{ inputs.ubuntu_image }}
 
     concurrency:
       group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
@@ -103,6 +120,7 @@ jobs:
       image_digest: ${{ steps.check_existing.outputs.digest || steps.build_output.outputs.digest }}
       build_id: ${{ steps.check_existing.outputs.build_id || steps.build_meta.outputs.build_id }}
       deployment_env: ${{ steps.context.outputs.deployment_env }}
+      build_skipped: ${{ steps.check_existing.outputs.status == 'found' }}
 
     steps:
       - name: Check out code
@@ -333,3 +351,63 @@ jobs:
         with:
           environment: ${{ steps.context.outputs.deployment_env }}
           version: ${{ steps.build_meta.outputs.sentry_version || steps.check_existing.outputs.sentry_version}}
+
+  helm-chart:
+    name: Package helm chart for the build
+    runs-on: runner-prod
+    needs: build
+
+    env:
+      HELM_CHART_OUTPUT_URL: oci://${{ inputs.docker_registry }}/${{ inputs.helm_chart_repo }}
+      HELM_CHART_BASE_URL: oci://harbor.kausal.tech/library/helm-charts
+
+    outputs:
+      chart_url: ${{ env.HELM_CHART_OUTPUT_URL }}
+      chart_version: ${{ steps.helm_chart.outputs.version }}
+
+    container:
+      image: ${{ inputs.ubuntu_image }}
+    permissions: {}
+
+    concurrency:
+      group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
+
+    steps:
+      - name: Log into Docker registry
+        uses: docker/login-action@v3
+        if: ${{ !needs.build.outputs.build_skipped }}
+        with:
+          registry: ${{ inputs.docker_registry }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Download base helm chart
+        working-directory: ${{ runner.temp }}
+        id: helm_chart_base
+        if: ${{ !needs.build.outputs.build_skipped }}
+        run: |
+          mkdir helm && cd helm
+          if [ "${{ inputs.project_type }}" == "django" ]; then
+            chart_name="django"
+          else
+            chart_name="nextjs"
+          fi
+          echo chart_name=${chart_name} >> $GITHUB_OUTPUT
+          helm pull --untar ${{ env.HELM_CHART_BASE_URL }}/${chart_name}
+
+      - name: Package and upload helm chart
+        id: helm_chart
+        working-directory: ${{ runner.temp }}/helm
+        run: |
+          build_id="${{ needs.build.outputs.build_id }}"
+          date=$(echo ${build_id} | cut -d '_' -f 1)
+          time=$(echo ${build_id} | cut -d '_' -f 2)
+          version="1.$(date).$(time)"
+
+          if [ "${{ needs.build.outputs.build_skipped }}" != "true" ]; then
+            chart_name="${{ steps.helm_chart_base.outputs.chart_name }}"
+            rm -f ${chart_name}-*.tgz
+            helm package ${chart_name} --version ${version} --app-version ${{ needs.build.outputs.image_tag }}
+            helm push ${chart_name}-* ${{ env.HELM_CHART_OUTPUT_URL }}
+          fi
+          echo version=${version} >> $GITHUB_OUTPUT

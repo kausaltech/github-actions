@@ -28,6 +28,7 @@ jobs:
   deploy:
     name: Deploy image
     runs-on: ubuntu-latest
+    permissions: {}
 
     concurrency:
       group: ${{ inputs.project_id}}/${{ inputs.deployment_env }}
@@ -40,6 +41,7 @@ jobs:
           ref: main
           ssh-key: ${{ secrets.gitops_ssh_key }}
           fetch-depth: 0
+
       - name: Update image information
         run: |
           path="${{ inputs.project_id }}/${{ inputs.deployment_env }}"

@@ -226,7 +226,6 @@ jobs:
           endpoint: tcp://buildkitd:1234
           install: false
           cleanup: true
-          annotations: ${{ steps.docker_meta.outputs.annotations }}
 
       - name: Build Django image
         uses: docker/build-push-action@v5
@@ -238,6 +237,7 @@ jobs:
           context: .
           file: ${{ inputs.dockerfile || './docker/app/Dockerfile' }}
           push: true
+          annotations: ${{ steps.docker_meta.outputs.annotations }}
           build-args: |
             SENTRY_ORG=${{ inputs.sentry_org }}
             SENTRY_URL=${{ inputs.sentry_url }}

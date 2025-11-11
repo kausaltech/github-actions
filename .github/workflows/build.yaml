@@ -188,6 +188,8 @@ jobs:
       - name: Determine Docker tags and labels
         id: docker_meta
         uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
         with:
           images: ${{ env.IMAGE_FULL_PATH }}
           tags: |
@@ -224,6 +226,7 @@ jobs:
           endpoint: tcp://buildkitd:1234
           install: false
           cleanup: true
+          annotations: ${{ steps.docker_meta.outputs.annotations }}
 
       - name: Build Django image
         uses: docker/build-push-action@v5

@@ -224,7 +224,6 @@ jobs:
           driver: remote
           driver-opts: ''
           endpoint: tcp://buildkitd:1234
-          install: false
           cleanup: true
 
       - name: Build Django image

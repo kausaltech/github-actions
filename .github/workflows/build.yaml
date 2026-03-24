@@ -54,6 +54,8 @@ on:
         required: false
       SENTRY_AUTH_TOKEN:
         required: false
+      SANITY_VIEWER_TOKEN:
+        required: false
       EXTRA_PYPI_INDEX:
         required: false
     outputs:
@@ -287,6 +289,7 @@ jobs:
             NPM_TOKEN=${{ secrets.NPM_TOKEN }}
             NPM_USER=${{ secrets.NPM_USER }}
             NPM_PASSWORD=${{ secrets.NPM_PASSWORD }}
+            SANITY_VIEWER_TOKEN=${{ secrets.SANITY_VIEWER_TOKEN }}
           labels: |
             ${{ steps.docker_meta.outputs.labels }}
             org.opencontainers.image.version=${{ steps.build_meta.outputs.build_id }}

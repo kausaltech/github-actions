@@ -104,7 +104,5 @@ jobs:
             cat ${{ runner.temp }}/mypy-output.txt
             exit $mypy_exit
           fi
-          echo filtering suppressed mypy errors
-          cat ${{ runner.temp }}/mypy-output.txt | mypy-baseline filter --hide-stats > ${{ runner.temp }}/mypy-baselined-output.txt || baseline_exit=$?
           echo running reviewdog again for mypy reporting
-          reviewdog -tee -f=mypy -name=mypy -filter-mode=nofilter $REVIEWDOG_ARGS < ${{ runner.temp }}/mypy-baselined-output.txt
+          reviewdog -tee -f=mypy -name=mypy -filter-mode=nofilter $REVIEWDOG_ARGS < ${{ runner.temp }}/mypy-output.txt

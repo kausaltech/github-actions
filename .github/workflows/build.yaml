@@ -314,19 +314,19 @@ jobs:
           subject-digest: ${{ steps.build_output.outputs.digest }}
           push-to-registry: true
 
-      - name: Sign the images with GitHub OIDC Token
-        if: steps.build_meta.outcome != 'skipped' || steps.update_existing_tags.outputs.updated_tags
-        env:
-          DIGEST: ${{ steps.build_output.outputs.digest || steps.check_existing.outputs.digest }}
-          # IMAGE: ${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}
-        run: |
-          images="${{ steps.update_existing_tags.outputs.updated_tags }} "
-          BUILD_TAGS="${{ steps.docker_meta.outputs.tags }}"
-          for tag in ${BUILD_TAGS}; do
-            images="$images ${tag}@${DIGEST} "
-          done
-          echo $images | xargs cosign sign --tlog-upload=false --yes
-        shell: bash
+      # - name: Sign the images with GitHub OIDC Token
+      #   if: steps.build_meta.outcome != 'skipped' || steps.update_existing_tags.outputs.updated_tags
+      #   env:
+      #     DIGEST: ${{ steps.build_output.outputs.digest || steps.check_existing.outputs.digest }}
+      #     # IMAGE: ${{ inputs.docker_registry }}/${{ inputs.docker_build_cache_image_name }}
+      #   run: |
+      #     images="${{ steps.update_existing_tags.outputs.updated_tags }} "
+      #     BUILD_TAGS="${{ steps.docker_meta.outputs.tags }}"
+      #     for tag in ${BUILD_TAGS}; do
+      #       images="$images ${tag}@${DIGEST} "
+      #     done
+      #     echo $images | xargs cosign sign --tlog-upload=false --yes
+      #   shell: bash
 
       - name: Create Sentry release
         uses: getsentry/action-release@v1

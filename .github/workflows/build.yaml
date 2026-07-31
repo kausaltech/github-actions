@@ -190,7 +190,7 @@ jobs:
 
       - name: Determine Docker tags and labels
         id: docker_meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
         with:
@@ -235,6 +235,7 @@ jobs:
         if: inputs.project_type == 'django' && steps.build_meta.outcome != 'skipped'
         env:
           BUILDX_GIT_INFO: 'false'
+          DOCKER_BUILD_RECORD_UPLOAD: 'false'
         with:
           context: .
           file: ${{ inputs.dockerfile || './docker/app/Dockerfile' }}

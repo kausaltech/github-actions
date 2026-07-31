@@ -236,6 +236,7 @@ jobs:
         env:
           BUILDX_GIT_INFO: 'false'
           DOCKER_BUILD_RECORD_UPLOAD: 'false'
+          DOCKER_BUILD_SUMMARY: 'false'
         with:
           context: .
           file: ${{ inputs.dockerfile || './docker/app/Dockerfile' }}

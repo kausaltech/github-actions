@@ -96,7 +96,7 @@ jobs:
       artifact-metadata: write
       contents: read
     container:
-      image: harbor.kausal.tech/library/ubuntu:latest
+      image: harbor.kausal.tech/library/ubuntu:v20260831
 
     concurrency:
       group: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
@@ -116,7 +116,11 @@ jobs:
           ssh-key: ${{ secrets.PRIVATE_SUBMODULE_DEPLOY_KEY }}
 
       - name: Check out submodules
-        run: git submodule update --init --recursive --checkout
+        run: |
+          if ssh_command=$(git config --local core.sshCommand); then
+            export GIT_SSH_COMMAND="$ssh_command"
+          fi
+          git submodule update --init --recursive --checkout
 
       - name: Set build context
         run: |

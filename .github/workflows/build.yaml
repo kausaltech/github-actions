@@ -58,6 +58,8 @@ on:
         required: false
       EXTRA_PYPI_INDEX:
         required: false
+      PRIVATE_SUBMODULE_DEPLOY_KEY:
+        required: false
     outputs:
       image_id:
         description: "SHA digest for the built image"
@@ -111,7 +113,10 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          ssh-key: ${{ secrets.PRIVATE_SUBMODULE_DEPLOY_KEY }}
+
+      - name: Check out submodules
+        run: git submodule update --init --recursive --checkout
 
       - name: Set build context
         run: |

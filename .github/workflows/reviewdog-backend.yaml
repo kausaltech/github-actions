@@ -3,7 +3,9 @@ name: Lint
 on:
   workflow_call:
     secrets:
-      EXTRA_PYPI_INDEX:
+      # Deploy key for the private extensions submodule; without it the lint runs on the open-source
+      # part alone, as it does for outside contributors.
+      PRIVATE_SUBMODULE_DEPLOY_KEY:
         required: false
 
 jobs:
@@ -17,8 +19,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
           fetch-depth: 0
+          ssh-key: ${{ secrets.PRIVATE_SUBMODULE_DEPLOY_KEY }}
+
+      # The private extensions submodule has `update = none`, so a plain update skips it. With the
+      # deploy key present, `--checkout` overrides that and the extension gets linted too.
+      - name: Check out submodules
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if ssh_command=$(git config --local core.sshCommand); then
+            export GIT_SSH_COMMAND="$ssh_command"
+          fi
+          if [ -n "${{ secrets.PRIVATE_SUBMODULE_DEPLOY_KEY }}" ]; then
+            git submodule update --init --recursive --checkout
+          else
+            git submodule update --init --recursive
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
@@ -47,15 +63,7 @@ jobs:
           sudo apt-get update && sudo apt-get install --no-install-recommends -y libproj-dev libgdal-dev
 
       - name: Install Python dependencies
-        env:
-          EXTRA_PYPI_INDEX: ${{ secrets.EXTRA_PYPI_INDEX }}
-        run: |
-          if [ -n "${{ secrets.EXTRA_PYPI_INDEX }}" ]; then
-            INDEX_ARG="--index ${EXTRA_PYPI_INDEX}"
-          else
-            INDEX_ARG=""
-          fi
-          uv sync ${INDEX_ARG} --group lint --extra kausal
+        run: uv sync --group lint
 
       - name: Determine Reviewdog context
         id: reviewdog_context

@@ -56,8 +56,6 @@ on:
         required: false
       SANITY_VIEWER_TOKEN:
         required: false
-      EXTRA_PYPI_INDEX:
-        required: false
       PRIVATE_SUBMODULE_DEPLOY_KEY:
         required: false
     outputs:
@@ -264,7 +262,6 @@ jobs:
             DJANGO_PROJECT=${{ inputs.django_project || '' }}
           secrets: |
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
-            EXTRA_PYPI_INDEX=${{ secrets.EXTRA_PYPI_INDEX }}
           labels: |
             ${{ steps.docker_meta.outputs.labels }}
             org.opencontainers.image.version=${{ steps.build_meta.outputs.build_id }}

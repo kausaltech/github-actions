@@ -210,13 +210,14 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=latest-deployment-{{branch}},enable=${{steps.context.outputs.deployment_env != ''}}
             type=raw,value={{branch}}-latest,enable=${{steps.context.outputs.deployment_env != ''}}
+            type=raw,value={{branch}}-build-${{ env.IMAGE_BUILD_ID }},enable=${{steps.context.outputs.deployment_env != ''}}
 
       - name: Update existing image tags
         if: steps.check_existing.outputs.status == 'found'
         id: update_existing_tags
         run: |
           echo "Tags: ${{ steps.docker_meta.outputs.tags }}"
-          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | (grep latest || true) | xargs)
+          TAGS=$(echo "${{ steps.docker_meta.outputs.tags }}" | (grep -E 'latest|-build-' || true) | xargs)
           echo "Tags with latest: $TAGS"
           updated_tags=""
           for tag in $TAGS ; do

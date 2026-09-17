@@ -1,0 +1,85 @@
+name: Require and record a successful result
+on:
+  workflow_call:
+    inputs:
+      task:
+        required: true
+        type: string
+      identity:
+        required: false
+        type: string
+        default: v1
+      successful:
+        description: True only when all required task jobs succeeded
+        required: true
+        type: boolean
+      reused:
+        required: false
+        type: boolean
+        default: false
+      outputs:
+        description: Non-secret JSON object to restore on a future run
+        required: false
+        type: string
+        default: '{}'
+      source_url:
+        required: false
+        type: string
+      enabled:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          RESULT_TASK: ${{ inputs.task }}
+          RESULT_IDENTITY: ${{ inputs.identity }}
+          RESULT_SUCCESSFUL: ${{ inputs.successful }}
+          RESULT_REUSED: ${{ inputs.reused }}
+          RESULT_OUTPUTS: ${{ inputs.outputs }}
+          RESULT_SOURCE_URL: ${{ inputs.source_url }}
+          RESULT_ENABLED: ${{ inputs.enabled }}
+        with:
+          script: |
+            const { createHash } = require('node:crypto');
+            if (process.env.RESULT_REUSED === 'true') {
+              await core.summary.addHeading(`Reused ${process.env.RESULT_TASK}`)
+                .addLink('Original run', process.env.RESULT_SOURCE_URL).write();
+              return;
+            }
+            if (process.env.RESULT_SUCCESSFUL !== 'true') {
+              core.setFailed(`No successful result for ${process.env.RESULT_TASK}`);
+              return;
+            }
+            // Fork PR tokens cannot write checks. Their results must not seed trusted reuse.
+            if (process.env.RESULT_ENABLED !== 'true' ||
+                (context.payload.pull_request && context.payload.pull_request.head.repo.full_name !==
+                  `${context.repo.owner}/${context.repo.repo}`)) return;
+            const task = process.env.RESULT_TASK;
+            const identity = process.env.RESULT_IDENTITY;
+            try {
+              const outputs = JSON.parse(process.env.RESULT_OUTPUTS);
+              if (!outputs || typeof outputs !== 'object' || Array.isArray(outputs)) throw new Error('outputs must be a JSON object');
+              const key = createHash('sha256').update(JSON.stringify([1, task, context.sha, identity])).digest('hex');
+              const record = {
+                schema: 1, task, commit: context.sha, identity,
+                workflow: process.env.GITHUB_WORKFLOW_REF.split('@')[0],
+                outputs, source_run_id: context.runId,
+              };
+              await github.rest.checks.create({
+                ...context.repo, name: `Kausal result: ${task}`, head_sha: context.sha,
+                external_id: key, status: 'completed', conclusion: 'success',
+                completed_at: new Date().toISOString(),
+                details_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                output: { title: `Successful ${task}`, summary: 'Reusable result metadata (schema 1).', text: JSON.stringify(record) },
+              });
+            } catch (error) {
+              // Recording is an optimization: it cannot turn a successful task into a failure.
+              core.warning(`Could not record ${task}; future runs will execute it again: ${error.message}`);
+            }

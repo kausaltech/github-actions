@@ -1,0 +1,228 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Build or reuse image
+
+on:
+  workflow_call:
+    inputs:
+      project_id:
+        required: true
+        type: string
+      project_type:
+        required: true
+        description: "Type of project: either 'nextjs' or 'django'"
+        type: string
+      docker_image_name:
+        required: false
+        type: string
+        default: ${{ vars.DOCKER_IMAGE_REPO }}
+      docker_build_cache_image_name:
+        required: false
+        type: string
+        default: ${{ vars.DOCKER_IMAGE_BUILD_REPO }}
+      docker_registry:
+        required: false
+        type: string
+        default: ${{ vars.DOCKER_REGISTRY }}
+      sentry_org:
+        required: false
+        default: ${{ vars.SENTRY_ORG }}
+        type: string
+      sentry_url:
+        required: false
+        default: ${{ vars.SENTRY_URL }}
+        type: string
+      sentry_project:
+        required: false
+        default: ${{ vars.SENTRY_PROJECT }}
+        type: string
+      django_project:
+        required: false
+        type: string
+      dockerfile:
+        required: false
+        type: string
+    secrets:
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
+      NPM_TOKEN:
+        required: false
+      NPM_USER:
+        required: false
+      NPM_PASSWORD:
+        required: false
+      SENTRY_AUTH_TOKEN:
+        required: false
+      SANITY_VIEWER_TOKEN:
+        required: false
+      PRIVATE_SUBMODULE_DEPLOY_KEY:
+        required: false
+    outputs:
+      image_id:
+        value: ${{ jobs.finish.outputs.image_id }}
+      image_digest:
+        value: ${{ jobs.finish.outputs.image_digest }}
+      image_registry:
+        value: ${{ inputs.docker_registry }}
+      image:
+        value: ${{ jobs.finish.outputs.image }}
+      image_tag:
+        value: ${{ jobs.finish.outputs.image_tag }}
+      build_id:
+        value: ${{ jobs.finish.outputs.build_id }}
+      deployment_env:
+        value: ${{ jobs.prepare.outputs.deployment_env }}
+
+jobs:
+  previous:
+    uses: ./.github/workflows/result-lookup.yaml
+    with:
+      task: build
+      identity: ${{ format('v1:{0}', toJSON(inputs)) }}
+
+  prepare:
+    needs: previous
+    runs-on: ubuntu-latest
+    outputs:
+      hit: ${{ steps.validate.outputs.valid == 'true' && steps.verify.outcome == 'success' }}
+      outputs: ${{ needs.previous.outputs.outputs }}
+      deployment_env: ${{ steps.context.outputs.deployment_env }}
+    steps:
+      - name: Determine current deployment context
+        id: context
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setOutput('deployment_env', context.ref.startsWith('refs/heads/deployment/')
+              ? context.ref.split('/')[3] : '');
+      - name: Validate recorded image metadata
+        if: needs.previous.outputs.hit == 'true'
+        id: validate
+        uses: actions/github-script@v8
+        env:
+          CACHED_OUTPUTS: ${{ needs.previous.outputs.outputs }}
+          EXPECTED_IMAGE: ${{ inputs.docker_registry }}/${{ inputs.docker_image_name }}
+        with:
+          script: |
+            const data = JSON.parse(process.env.CACHED_OUTPUTS);
+            const valid = data.image === process.env.EXPECTED_IMAGE &&
+              data.image_tag === `git-${context.sha.slice(0, 7)}` &&
+              typeof data.build_id === 'string' && data.build_id.length > 0 &&
+              /^sha256:[0-9a-f]{64}$/.test(data.image_digest);
+            core.setOutput('valid', valid ? 'true' : 'false');
+      - name: Log into Docker registry
+        if: steps.validate.outputs.valid == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ inputs.docker_registry }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Verify the recorded image still exists
+        if: steps.validate.outputs.valid == 'true'
+        id: verify
+        continue-on-error: true
+        env:
+          IMAGE: ${{ fromJSON(needs.previous.outputs.outputs).image }}
+          DIGEST: ${{ fromJSON(needs.previous.outputs.outputs).image_digest }}
+        run: docker buildx imagetools inspect "$IMAGE@$DIGEST" > /dev/null
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.hit != 'true'
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
+    with:
+      project_id: ${{ inputs.project_id }}
+      project_type: ${{ inputs.project_type }}
+      docker_image_name: ${{ inputs.docker_image_name }}
+      docker_build_cache_image_name: ${{ inputs.docker_build_cache_image_name }}
+      docker_registry: ${{ inputs.docker_registry }}
+      sentry_org: ${{ inputs.sentry_org }}
+      sentry_url: ${{ inputs.sentry_url }}
+      sentry_project: ${{ inputs.sentry_project }}
+      django_project: ${{ inputs.django_project }}
+      dockerfile: ${{ inputs.dockerfile }}
+
+  finish:
+    needs: [previous, prepare, build]
+    if: ${{ !cancelled() && (needs.prepare.outputs.hit == 'true' || needs.build.result == 'success') }}
+    runs-on: ubuntu-latest
+    outputs:
+      image_id: ${{ steps.outputs.outputs.image_id }}
+      image_digest: ${{ steps.outputs.outputs.image_digest }}
+      image: ${{ steps.outputs.outputs.image }}
+      image_tag: ${{ steps.outputs.outputs.image_tag }}
+      build_id: ${{ steps.outputs.outputs.build_id }}
+    steps:
+      - name: Restore build outputs
+        id: outputs
+        uses: actions/github-script@v8
+        env:
+          BUILD_OUTPUTS: ${{ needs.prepare.outputs.hit == 'true' && needs.prepare.outputs.outputs || toJSON(needs.build.outputs) }}
+        with:
+          script: |
+            const data = JSON.parse(process.env.BUILD_OUTPUTS);
+            for (const key of ['image_id', 'image_digest', 'image', 'image_tag', 'build_id']) {
+              core.setOutput(key, data[key] || '');
+            }
+      - name: Log into Docker registry
+        if: needs.prepare.outputs.hit == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ inputs.docker_registry }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Determine current image tags
+        if: needs.prepare.outputs.hit == 'true'
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.outputs.outputs.image }}
+          tags: |
+            type=raw,value=${{ steps.outputs.outputs.image_tag }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest-deployment-{{branch}},enable=${{ needs.prepare.outputs.deployment_env != '' }}
+            type=raw,value={{branch}}-latest,enable=${{ needs.prepare.outputs.deployment_env != '' }}
+            type=raw,value={{branch}}-build-${{ steps.outputs.outputs.build_id }},enable=${{ needs.prepare.outputs.deployment_env != '' }}
+      - name: Promote the existing image for the current ref
+        if: needs.prepare.outputs.hit == 'true'
+        env:
+          IMAGE: ${{ steps.outputs.outputs.image }}
+          DIGEST: ${{ steps.outputs.outputs.image_digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          args=()
+          while IFS= read -r tag; do
+            [ -z "$tag" ] || args+=(-t "$tag")
+          done <<< "$TAGS"
+          docker buildx imagetools create "${args[@]}" "$IMAGE@$DIGEST"
+        shell: bash
+      - name: Check out release commit metadata
+        if: needs.prepare.outputs.hit == 'true' && needs.prepare.outputs.deployment_env != ''
+        uses: actions/checkout@v7
+      - name: Create Sentry release for the current deployment
+        if: needs.prepare.outputs.hit == 'true' && needs.prepare.outputs.deployment_env != ''
+        uses: getsentry/action-release@v3
+        continue-on-error: true
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ inputs.sentry_org }}
+          SENTRY_PROJECT: ${{ inputs.sentry_project }}
+          SENTRY_URL: ${{ inputs.sentry_url }}
+        with:
+          environment: ${{ needs.prepare.outputs.deployment_env }}
+          version: ${{ inputs.sentry_project }}@${{ steps.outputs.outputs.build_id }}
+
+  result:
+    needs: [previous, prepare, build, finish]
+    if: always()
+    uses: ./.github/workflows/result-record.yaml
+    with:
+      task: build
+      identity: ${{ format('v1:{0}', toJSON(inputs)) }}
+      # A cache hit still needs successful promotion for the current ref.
+      reused: ${{ needs.prepare.outputs.hit == 'true' && needs.finish.result == 'success' }}
+      source_url: ${{ needs.previous.outputs.source_url }}
+      successful: ${{ needs.finish.result == 'success' }}
+      outputs: ${{ toJSON(needs.finish.outputs) }}

@@ -59,6 +59,9 @@ on:
       PRIVATE_SUBMODULE_DEPLOY_KEY:
         required: false
     outputs:
+      image_digest:
+        description: "Registry manifest digest of the built or reused image"
+        value: "${{ jobs.build.outputs.image_digest }}"
       image_id:
         description: "SHA digest for the built image"
         value: "${{ jobs.build.outputs.image_id }}"

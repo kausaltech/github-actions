@@ -1,0 +1,81 @@
+name: Look up a successful result
+on:
+  workflow_call:
+    inputs:
+      task:
+        required: true
+        type: string
+      identity:
+        description: Additional task inputs and an explicit recipe version
+        required: false
+        type: string
+        default: v1
+      enabled:
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      hit:
+        value: ${{ jobs.lookup.outputs.hit }}
+      outputs:
+        description: JSON object recorded by the successful task
+        value: ${{ jobs.lookup.outputs.outputs }}
+      source_url:
+        value: ${{ jobs.lookup.outputs.source_url }}
+
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+      actions: read
+    outputs:
+      hit: ${{ steps.lookup.outputs.hit }}
+      outputs: ${{ steps.lookup.outputs.outputs }}
+      source_url: ${{ steps.lookup.outputs.source_url }}
+    steps:
+      - uses: actions/github-script@v8
+        id: lookup
+        env:
+          RESULT_TASK: ${{ inputs.task }}
+          RESULT_IDENTITY: ${{ inputs.identity }}
+          RESULT_ENABLED: ${{ inputs.enabled }}
+        with:
+          script: |
+            const { createHash } = require('node:crypto');
+            core.setOutput('hit', 'false');
+            core.setOutput('outputs', '{}');
+            if (process.env.RESULT_ENABLED !== 'true' || Number(process.env.GITHUB_RUN_ATTEMPT) > 1 ||
+                !['push', 'pull_request'].includes(context.eventName)) return;
+            const task = process.env.RESULT_TASK;
+            const identity = process.env.RESULT_IDENTITY;
+            const key = createHash('sha256').update(JSON.stringify([1, task, context.sha, identity])).digest('hex');
+            const workflowPath = process.env.GITHUB_WORKFLOW_REF.split('@')[0];
+            try {
+              const checks = await github.paginate(github.rest.checks.listForRef, {
+                ...context.repo, ref: context.sha, check_name: `Kausal result: ${task}`,
+                status: 'completed', filter: 'all', per_page: 100,
+              });
+              for (const check of checks) {
+                if (check.conclusion !== 'success' || check.external_id !== key ||
+                    check.app?.slug !== 'github-actions' || check.head_sha !== context.sha) continue;
+                let record;
+                try { record = JSON.parse(check.output?.text); } catch { continue; }
+                if (record?.schema !== 1 || record.task !== task || record.commit !== context.sha ||
+                    record.identity !== identity || record.workflow !== workflowPath ||
+                    !Number.isSafeInteger(record.source_run_id) || record.source_run_id === context.runId ||
+                    !record.outputs || typeof record.outputs !== 'object' || Array.isArray(record.outputs)) continue;
+                const { data: source } = await github.rest.actions.getWorkflowRun({
+                  ...context.repo, run_id: record.source_run_id,
+                });
+                if (source.head_sha !== context.sha ||
+                    `${context.repo.owner}/${context.repo.repo}/${source.path.split('@')[0]}` !== workflowPath) continue;
+                await core.summary.addHeading(`Reusing ${task}`).addLink('Original run', source.html_url).write();
+                core.setOutput('outputs', JSON.stringify(record.outputs));
+                core.setOutput('source_url', source.html_url);
+                core.setOutput('hit', 'true');
+                return;
+              }
+            } catch (error) {
+              core.warning(`Result lookup unavailable; running ${task}: ${error.message}`);
+            }
